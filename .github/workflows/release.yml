@@ -20,14 +20,8 @@ jobs:
       - name: Read version
         id: meta
         run: |
-          version=$(jq -r .version package.json)
-          manifest_version=$(jq -r .version saturn-module.json)
+          version=$(jq -r .version saturn-module.json)
           id=$(jq -r .id saturn-module.json)
-          # The marketplace requires the zip's manifest version to match the listed version.
-          if [ "$version" != "$manifest_version" ]; then
-            echo "::error::package.json version ($version) does not match saturn-module.json version ($manifest_version)"
-            exit 1
-          fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
           echo "zip=$id-$version.zip" >> "$GITHUB_OUTPUT"

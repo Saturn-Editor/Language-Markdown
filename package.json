@@ -1,8 +1,3 @@
 {
-  "name": "Saturn-Markdown",
-  "version": "0.1.0",
-  "description": "Markdown language module for Saturn",
-  "type": "module",
-  "main": "module.js",
-  "private": true
+  "type": "module"
 }

@@ -11,6 +11,8 @@ import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { headings, slugify } from '../lib/markdown.js';
 
+const { version } = JSON.parse(readFileSync(new URL('../saturn-module.json', import.meta.url), 'utf8'));
+
 const CompletionKind = { Text: 1, Reference: 18, File: 17, Folder: 19, Snippet: 15 };
 
 const documents = new Map();
@@ -60,7 +62,7 @@ const handlers = {
         textDocumentSync: 1,
         completionProvider: { triggerCharacters: ['(', '/', '#', '['] },
       },
-      serverInfo: { name: 'saturn-markdown', version: '0.1.0' },
+      serverInfo: { name: 'saturn-markdown', version },
     };
   },
   shutdown: () => null,
