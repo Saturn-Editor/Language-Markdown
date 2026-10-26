@@ -1,0 +1,38 @@
+{
+  "id": "markdown",
+  "name": "Markdown",
+  "version": "1.0.0",
+  "description": "Language module for Markdown files (.md)",
+  "badge": "MD",
+  "saturnApi": "^0.0",
+  "main": "module.js",
+  "activationEvents": ["workspaceContains:**/*.md"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "markdown",
+        "name": "Markdown",
+        "extensions": [".md", ".markdown"],
+        "grammar": "grammars/markdown.tmLanguage.json",
+        "scopeName": "text.html.markdown"
+      }
+    ],
+    "languageServer": {
+      "languages": ["markdown"],
+      "command": "node",
+      "args": ["server/server.js", "--stdio"]
+    },
+    "previews": [{ "id": "markdown.preview", "label": "Markdown", "extensions": [".md", ".markdown"] }],
+    "fileTemplates": [
+      { "id": "markdown.readme", "label": "Markdown File", "kind": "file", "extension": ".md", "placeholder": "Title" }
+    ],
+    "commands": [{ "id": "markdown.openReadme", "title": "Create README" }],
+    "newProject": {
+      "language": "markdown",
+      "fields": [
+        { "id": "title", "label": "Title", "type": "text", "default": "My Notes" },
+        { "id": "readme", "label": "Create README.md", "type": "checkbox", "default": true }
+      ]
+    }
+  }
+}
