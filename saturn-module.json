@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Language module for Markdown files (.md)",
   "badge": "MD",
-  "saturnApi": "^0.0",
+  "saturnApi": "^0.1",
   "main": "module.js",
   "activationEvents": ["workspaceContains:**/*.md"],
   "contributes": {
@@ -26,7 +26,7 @@
     "fileTemplates": [
       { "id": "markdown.readme", "label": "Markdown File", "kind": "file", "extension": ".md", "placeholder": "Title" }
     ],
-    "commands": [{ "id": "markdown.openReadme", "title": "Create README" }],
+    "commands": [{ "id": "markdown.openReadme", "title": "Open README" }],
     "newProject": {
       "language": "markdown",
       "fields": [
