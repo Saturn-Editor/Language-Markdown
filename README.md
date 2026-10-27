@@ -1,6 +1,6 @@
 # Markdown for Saturn
 
-A Saturn language module for Markdown files (`.md`, `.markdown`).
+A Saturn language for Markdown files (`.md`, `.markdown`).
 
 ## Features
 
@@ -24,7 +24,7 @@ Requires Saturn module API `0.1`.
 
 | Path | Purpose |
 | --- | --- |
-| `saturn-module.json` | Manifest: what the module contributes |
+| `saturn-language.json` | Manifest: what the language contributes |
 | `module.js` | Registers the preview, command, template and project handlers |
 | `lib/markdown.js` | Markdown → HTML renderer and heading outline, shared by the module and server |
 | `preview.css` | Preview styling, using Saturn's theme variables |

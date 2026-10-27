@@ -1,10 +1,10 @@
 {
   "id": "markdown",
   "name": "Markdown",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Language module for Markdown files (.md)",
   "badge": "MD",
-  "saturnApi": "^0.1",
+  "saturnApi": "^0.2",
   "main": "module.js",
   "activationEvents": ["workspaceContains:**/*.md"],
   "contributes": {

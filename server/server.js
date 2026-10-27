@@ -11,7 +11,7 @@ import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { headings, slugify } from '../lib/markdown.js';
 
-const { version } = JSON.parse(readFileSync(new URL('../saturn-module.json', import.meta.url), 'utf8'));
+const { version } = JSON.parse(readFileSync(new URL('../saturn-language.json', import.meta.url), 'utf8'));
 
 const CompletionKind = { Text: 1, Reference: 18, File: 17, Folder: 19, Snippet: 15 };
 
