@@ -1,10 +1,10 @@
 {
   "id": "markdown",
   "name": "Markdown",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "description": "Language module for Markdown files (.md)",
   "icon": "image.svg",
-  "saturnApi": "^0.2",
+  "saturnApi": "^0.3",
   "main": "module.js",
   "activationEvents": ["workspaceContains:**/*.md"],
   "contributes": {
@@ -20,11 +20,21 @@
     "languageServer": {
       "languages": ["markdown"],
       "command": "node",
-      "args": ["server/server.js", "--stdio"]
+      "args": ["server/server.js", "--stdio"],
+      "features": ["completion", "diagnostics", "symbols", "formatting"]
     },
     "previews": [{ "id": "markdown.preview", "label": "Markdown", "extensions": [".md", ".markdown"], "defaultView": "split" }],
     "fileTemplates": [
       { "id": "markdown.readme", "label": "Markdown File", "kind": "file", "extension": ".md", "placeholder": "Title" }
+    ],
+    "settings": [
+      {
+        "id": "remoteImages",
+        "label": "Load remote images in preview",
+        "type": "checkbox",
+        "default": true,
+        "description": "Show images from web addresses in the preview."
+      }
     ],
     "commands": [{ "id": "markdown.openReadme", "title": "Open README" }],
     "newProject": {

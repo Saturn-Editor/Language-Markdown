@@ -42,7 +42,6 @@ jobs:
         if: steps.check.outputs.exists == 'false'
         id: zip
         run: |
-          # Tracked files only, with saturn-language.json at the zip root.
           git archive --format=zip -o "${{ steps.meta.outputs.zip }}" HEAD -- . ':!.github' ':!.gitignore' ':!.idea'
           echo "sha256=$(sha256sum "${{ steps.meta.outputs.zip }}" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 

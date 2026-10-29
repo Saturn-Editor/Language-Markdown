@@ -1,15 +1,8 @@
-/**
- * A minimal Markdown language server over stdio (JSON-RPC with Content-Length framing).
- * Supports full-text sync and textDocument/completion:
- *   - link/image destinations: project files (relative to the document) and #heading anchors
- *   - reference links: labels defined in the document
- *   - a few block snippets at the start of a line
- */
 import { readdir } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { headings, slugify } from '../lib/markdown.js';
+import { formatTables, headingSlugger, headings, referenceDefinitions, splitLines, tableMismatches } from '../lib/markdown.js';
 
 const { version } = JSON.parse(readFileSync(new URL('../saturn-language.json', import.meta.url), 'utf8'));
 
@@ -17,8 +10,6 @@ const CompletionKind = { Text: 1, Reference: 18, File: 17, Folder: 19, Snippet: 
 
 const documents = new Map();
 let root = process.cwd();
-
-// ---- Transport ----
 
 let buffer = Buffer.alloc(0);
 process.stdin.on('data', (chunk) => {
@@ -50,8 +41,6 @@ function send(message) {
 
 const log = (message) => process.stderr.write(`[markdown-ls] ${message}\n`);
 
-// ---- Dispatch ----
-
 const handlers = {
   initialize(params) {
     const folder = params.workspaceFolders?.[0]?.uri ?? params.rootUri;
@@ -61,23 +50,35 @@ const handlers = {
       capabilities: {
         textDocumentSync: 1,
         completionProvider: { triggerCharacters: ['(', '/', '#', '['] },
+        documentSymbolProvider: true,
+        documentFormattingProvider: true,
       },
       serverInfo: { name: 'saturn-markdown', version },
     };
   },
   shutdown: () => null,
   'textDocument/completion': (params) => complete(params),
+  'textDocument/documentSymbol': ({ textDocument }) => symbols(textOf(textDocument.uri)),
+  'textDocument/formatting': ({ textDocument }) => format(textOf(textDocument.uri)),
 };
 
 const notifications = {
   exit: () => process.exit(0),
-  'textDocument/didOpen': ({ textDocument }) => documents.set(textDocument.uri, textDocument.text),
+  'textDocument/didOpen': ({ textDocument }) => update(textDocument.uri, textDocument.text),
   'textDocument/didChange': ({ textDocument, contentChanges }) => {
     const last = contentChanges[contentChanges.length - 1];
-    if (last && !last.range) documents.set(textDocument.uri, last.text);
+    if (last && !last.range) update(textDocument.uri, last.text);
   },
-  'textDocument/didClose': ({ textDocument }) => documents.delete(textDocument.uri),
+  'textDocument/didClose': ({ textDocument }) => {
+    documents.delete(textDocument.uri);
+    send({ method: 'textDocument/publishDiagnostics', params: { uri: textDocument.uri, diagnostics: [] } });
+  },
 };
+
+function update(uri, text) {
+  documents.set(uri, text);
+  send({ method: 'textDocument/publishDiagnostics', params: { uri, diagnostics: diagnose(text) } });
+}
 
 async function dispatch(message) {
   if (message.id === undefined) {
@@ -96,8 +97,6 @@ async function dispatch(message) {
   }
 }
 
-// ---- Completion ----
-
 const toPath = (uri) => (uri.startsWith('file:') ? fileURLToPath(uri) : uri);
 
 /** Saturn replaces the text matching this before the cursor, so insertText must cover exactly that. */
@@ -105,16 +104,14 @@ const WORD_BEFORE = /[\w#`[\]-]*$/;
 
 async function complete({ textDocument, position }) {
   const uri = textDocument.uri;
-  const text = documents.get(uri) ?? readOrEmpty(toPath(uri));
-  const lineText = text.split(/\r?\n/)[position.line] ?? '';
+  const text = textOf(uri);
+  const lineText = splitLines(text)[position.line] ?? '';
   const before = lineText.slice(0, position.character);
   const word = WORD_BEFORE.exec(before)[0];
 
-  // Inside a link destination: "[text](partial" or "![alt](partial".
   const dest = /\]\(<?([^\s()<>]*)$/.exec(before);
   if (dest) return destinationItems(dest[1], word, toPath(uri), text);
 
-  // Reference link label: "[text][partial".
   const ref = /\]\[([^\]]*)$/.exec(before);
   if (ref) return referenceItems(ref[1], word, text);
 
@@ -122,7 +119,6 @@ async function complete({ textDocument, position }) {
   return [];
 }
 
-/** Turns a full candidate into the text Saturn should insert in place of `word`. */
 function replacing(typed, word, candidate) {
   const kept = typed.slice(0, typed.length - word.length);
   return candidate.startsWith(kept) ? candidate.slice(kept.length) : candidate;
@@ -160,8 +156,7 @@ async function destinationItems(typed, word, docPath, text) {
 }
 
 function referenceItems(typed, word, text) {
-  const labels = new Set();
-  for (const m of text.matchAll(/^ {0,3}\[([^\]]+)\]:/gm)) labels.add(m[1]);
+  const labels = new Set(referenceDefinitions(text).map((def) => def.label));
   return [...labels].map((label) => ({ label, detail: 'Reference', insertText: replacing(typed, word, label), kind: CompletionKind.Reference }));
 }
 
@@ -181,13 +176,59 @@ function snippetItems(typed, word) {
 }
 
 function anchorsOf(text) {
-  const seen = new Map();
-  return headings(text).map(({ level, text: title }) => {
-    const base = slugify(title) || 'section';
-    const n = seen.get(base) ?? 0;
-    seen.set(base, n + 1);
-    return { level, title, slug: n ? `${base}-${n}` : base };
-  });
+  const slug = headingSlugger();
+  return headings(text).map(({ level, text: title }) => ({ level, title, slug: slug(title) }));
+}
+
+const SymbolKind = { String: 15 };
+
+function symbols(text) {
+  const lines = splitLines(text);
+  const end = (line) => ({ line, character: (lines[line] ?? '').length });
+  const roots = [];
+  const stack = [];
+  for (const { level, text: title, line } of headings(text)) {
+    while (stack.length && stack[stack.length - 1].level >= level) {
+      stack.pop().symbol.range.end = end(line - 2);
+    }
+    const start = { line: line - 1, character: 0 };
+    const symbol = {
+      name: title || '(untitled)',
+      detail: '#'.repeat(level),
+      kind: SymbolKind.String,
+      range: { start, end: end(lines.length - 1) },
+      selectionRange: { start, end: end(line - 1) },
+      children: [],
+    };
+    (stack.length ? stack[stack.length - 1].symbol.children : roots).push(symbol);
+    stack.push({ level, symbol });
+  }
+  return roots;
+}
+
+function format(text) {
+  const eol = /\r\n?/.exec(text)?.[0] ?? '\n';
+  const lines = splitLines(text);
+  return formatTables(text).map(({ start, end, lines: table }) => ({
+    range: { start: { line: start, character: 0 }, end: { line: end - 1, character: lines[end - 1].length } },
+    newText: table.join(eol),
+  }));
+}
+
+const Severity = { Warning: 2 };
+
+function diagnose(text) {
+  const lines = splitLines(text);
+  return tableMismatches(text).map(({ line, header, delimiter }) => ({
+    range: { start: { line, character: 0 }, end: { line: line + 1, character: lines[line + 1].length } },
+    severity: Severity.Warning,
+    source: 'markdown',
+    message: `Table header has ${header} column${header === 1 ? '' : 's'} but the delimiter row has ${delimiter}, so it won't render as a table.`,
+  }));
+}
+
+function textOf(uri) {
+  return documents.get(uri) ?? readOrEmpty(toPath(uri));
 }
 
 function readOrEmpty(path) {
@@ -197,8 +238,6 @@ function readOrEmpty(path) {
     return '';
   }
 }
-
-// ---- Project files (cached briefly; completion asks often) ----
 
 const SKIP = new Set(['.git', 'node_modules', '.idea', '.vscode', 'dist', 'out', 'build']);
 const FILE_LIMIT = 3000;
