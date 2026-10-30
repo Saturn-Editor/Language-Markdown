@@ -1,7 +1,7 @@
 import { readdir } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { formatTables, headingSlugger, headings, referenceDefinitions, splitLines, tableMismatches } from '../lib/markdown.js';
 
 const { version } = JSON.parse(readFileSync(new URL('../saturn-language.json', import.meta.url), 'utf8'));
@@ -52,6 +52,7 @@ const handlers = {
         completionProvider: { triggerCharacters: ['(', '/', '#', '['] },
         documentSymbolProvider: true,
         documentFormattingProvider: true,
+        renameProvider: true,
       },
       serverInfo: { name: 'saturn-markdown', version },
     };
@@ -60,6 +61,7 @@ const handlers = {
   'textDocument/completion': (params) => complete(params),
   'textDocument/documentSymbol': ({ textDocument }) => symbols(textOf(textDocument.uri)),
   'textDocument/formatting': ({ textDocument }) => format(textOf(textDocument.uri)),
+  'textDocument/rename': (params) => rename(params),
 };
 
 const notifications = {
@@ -204,6 +206,69 @@ function symbols(text) {
     stack.push({ level, symbol });
   }
   return roots;
+}
+
+const ATX_TEXT = /^( {0,3}#{1,6}(?:[ \t]+|$))(.*?)(?:[ \t]+#+)?[ \t]*$/;
+/** Link destinations and reference definitions that carry a #fragment. */
+const ANCHOR_LINK = /(\]\(<?|^ {0,3}\[[^\]]+\]:[ \t]*<?)([^\s()<>#]*)#([^\s()<>]+)/g;
+const MARKDOWN_FILE = /\.(md|markdown)$/i;
+
+/** Saturn sends no prepareRename, so a rename anywhere but a heading line is refused here. */
+async function rename({ textDocument, position, newName }) {
+  const uri = textDocument.uri;
+  const text = textOf(uri);
+  const lines = splitLines(text);
+  const index = headings(text).findIndex(({ line }) => line - 1 === position.line);
+  if (index === -1) throw new Error('Only headings can be renamed.');
+
+  const lineText = lines[position.line];
+  const atx = ATX_TEXT.exec(lineText);
+  const startChar = atx ? atx[1].length : lineText.length - lineText.trimStart().length;
+  const endChar = atx ? startChar + atx[2].length : lineText.trimEnd().length;
+  const title = newName.trim();
+
+  const renamed = [...lines];
+  renamed[position.line] = lineText.slice(0, startChar) + title + lineText.slice(endChar);
+  const oldSlug = anchorsOf(text)[index].slug;
+  const newSlug = anchorsOf(renamed.join('\n'))[index].slug;
+
+  const changes = {
+    [uri]: [{ range: { start: { line: position.line, character: startChar }, end: { line: position.line, character: endChar } }, newText: title }],
+  };
+  if (oldSlug === newSlug) return { changes };
+
+  const docPath = toPath(uri);
+  const openUris = new Map([...documents.keys()].map((key) => [toPath(key), key]));
+  const files = (await projectFiles()).filter((file) => MARKDOWN_FILE.test(file) && file !== docPath);
+  for (const [file, fileUri, source] of [[docPath, uri, text], ...files.map((file) => [file, openUris.get(file), null])]) {
+    const targetUri = fileUri ?? pathToFileURL(file).href;
+    const edits = anchorEdits(source ?? textOf(targetUri), dirname(file), docPath, oldSlug, newSlug, file === docPath);
+    if (edits.length) (changes[targetUri] ??= []).push(...edits);
+  }
+  return { changes };
+}
+
+function anchorEdits(text, dir, docPath, oldSlug, newSlug, sameFile) {
+  const edits = [];
+  splitLines(text).forEach((lineText, line) => {
+    for (const m of lineText.matchAll(ANCHOR_LINK)) {
+      const [, prefix, target, fragment] = m;
+      if (safeDecode(fragment) !== oldSlug) continue;
+      const pointsHere = target ? join(dir, safeDecode(target)) === docPath : sameFile;
+      if (!pointsHere) continue;
+      const character = m.index + prefix.length + target.length + 1;
+      edits.push({ range: { start: { line, character }, end: { line, character: character + fragment.length } }, newText: newSlug });
+    }
+  });
+  return edits;
+}
+
+function safeDecode(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }
 
 function format(text) {
