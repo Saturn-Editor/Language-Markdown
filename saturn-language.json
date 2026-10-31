@@ -1,24 +1,20 @@
 {
   "id": "markdown",
   "name": "Markdown",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "description": "Language module for Markdown files (.md)",
-  "icon": "image.svg",
-  "saturnApi": "^0.3",
+  "saturnApi": "^1.0",
   "main": "module.js",
-  "activationEvents": ["onLanguage:markdown", "workspaceContains:**/*.md"],
   "contributes": {
     "languages": [
       {
         "id": "markdown",
         "name": "Markdown",
         "extensions": [".md", ".markdown"],
-        "grammar": "grammars/markdown.tmLanguage.json",
-        "scopeName": "text.html.markdown"
+        "grammar": "grammars/markdown.tmLanguage.json"
       }
     ],
     "languageServer": {
-      "languages": ["markdown"],
       "command": "node",
       "args": ["server/server.js", "--stdio"],
       "features": ["completion", "diagnostics", "symbols", "formatting", "rename"]
